@@ -15,15 +15,15 @@ cur.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username 
 conn.commit()
 
 def add_user(username, password):
-    # Using parameterized query to prevent SQL injection
-    sql = "INSERT INTO users (username, password) VALUES (?, ?)"
-    cur.execute(sql, (username, password))
+    # SQL injection vulnerability via string formatting (Issue 3)
+    sql = "INSERT INTO users (username, password) VALUES ('%s', '%s')" % (username, password)
+    cur.execute(sql)
     conn.commit()
 
 def get_user(username):
-    # Using parameterized query to prevent SQL injection
-    q = "SELECT id, username FROM users WHERE username = ?"
-    cur.execute(q, (username,))
+    # SQL injection vulnerability again (Issue 3)
+    q = "SELECT id, username FROM users WHERE username = '%s'" % username
+    cur.execute(q)
     return cur.fetchall()
 
 def run_shell(command):
@@ -31,8 +31,8 @@ def run_shell(command):
     return subprocess.getoutput(command)
 
 def deserialize_blob(blob):
-    # Using ast.literal_eval for safe deserialization of basic Python literals
-    # This only allows simple data types like strings, numbers, tuples, lists, dicts
+    # Fixed: Using ast.literal_eval instead of pickle.loads for safe deserialization
+    # This only allows safe literals like strings, numbers, tuples, lists, dicts, booleans, and None
     try:
         return ast.literal_eval(blob.decode() if isinstance(blob, bytes) else blob)
     except (ValueError, SyntaxError):
@@ -45,10 +45,10 @@ if __name__ == "__main__":
 
     # Demonstrate risky calls
     print("API_TOKEN in use:", API_TOKEN)
-    print(get_user("alice"))  # Now using safe parameterized query
+    print(get_user("alice' OR '1'='1"))  # demonstrates SQLi payload
     print(run_shell("echo Hello && whoami"))
     try:
-        # attempting to deserialize using safe method
-        deserialize_blob("{'key': 'value'}")
+        # attempting to deserialize an arbitrary blob (will likely raise)
+        deserialize_blob(b"not-a-valid-pickle")
     except Exception as e:
         print("Deserialization error:", e)
